@@ -18,6 +18,8 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///reviews.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['GEMINI_API_KEY'] = os.getenv('GEMINI_API_KEY')
+    app.config['ADMIN_USERNAME'] = os.getenv('ADMIN_USERNAME')
+    app.config['ADMIN_PASSWORD'] = os.getenv('ADMIN_PASSWORD')
     app.config['APP_BASE_URL'] = os.getenv('APP_BASE_URL', 'http://127.0.0.1:5000')
 
     db.init_app(app)

@@ -3,7 +3,7 @@ import qrcode
 from qrcode.image.styledpil import StyledPilImage
 from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
 from qrcode.image.styles.colormasks import SolidFillColorMask
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, current_app
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, current_app, session
 from app.models import Business, Product, db
 import google.generativeai as genai
 from PIL import Image, ImageDraw
@@ -18,7 +18,34 @@ def get_google_review_link(place_id):
 
 @main_bp.route('/')
 def index():
-    return "Welcome to Smart Review Automator. Please use the business-specific QR link."
+    if session.get('admin_logged_in'):
+        return redirect(url_for('main.admin_page'))
+    return render_template('login.html')
+
+@main_bp.route('/login', methods=['POST'])
+def login():
+    username = request.form.get('username')
+    password = request.form.get('password')
+
+    # DEBUG: Print values to console to see if they match
+    admin_user = current_app.config.get('ADMIN_USERNAME')
+    admin_pass = current_app.config.get('ADMIN_PASSWORD')
+
+    print(f"LOGIN ATTEMPT: {username} / {password}")
+    print(f"EXPECTED: {admin_user} / {admin_pass}")
+
+    if username == admin_user and password == admin_pass:
+        session['admin_logged_in'] = True
+        print("LOGIN SUCCESS")
+        return redirect(url_for('main.admin_page'))
+
+    print("LOGIN FAILED")
+    return render_template('login.html', error="Invalid username or password")
+
+@main_bp.route('/logout')
+def logout():
+    session.pop('admin_logged_in', None)
+    return redirect(url_for('main.index'))
 
 @main_bp.route('/business/<int:business_id>')
 def business_landing(business_id):
@@ -64,6 +91,9 @@ def generate_review():
 
 @main_bp.route('/admin/setup', methods=['POST'])
 def admin_setup():
+    if not session.get('admin_logged_in'):
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+
     data = request.json
 
     business = Business.query.filter_by(name=data['name']).first()
@@ -87,7 +117,6 @@ def admin_setup():
         db.session.add(product)
     db.session.commit()
 
-    # --- LUXURY ROUNDED QR CODE GENERATION ---
     base_url = current_app.config['APP_BASE_URL']
     qr_url = f"{base_url}/business/{business.id}"
 
@@ -100,43 +129,29 @@ def admin_setup():
     qr.add_data(qr_url)
     qr.make(fit=True)
 
-    # 1. Generate the base Gold QR
     qr_img = qr.make_image(
         image_factory=StyledPilImage,
         module_drawer=RoundedModuleDrawer(),
         color_mask=SolidFillColorMask(
-            back_color=(255, 255, 255), # White
-            front_color=(212, 175, 55)  # Gold #D4AF37
+            back_color=(255, 255, 255),
+            front_color=(212, 175, 55)  # Gold
         )
     ).convert("RGBA")
 
-    # 2. Create a rounded-corner mask (The "Instagram" look)
-    # Add a small padding to the base image to allow for the rounded corners
     padding = 40
     width, height = qr_img.size
     canvas = Image.new("RGBA", (width + padding*2, height + padding*2), (0, 0, 0, 0))
-
-    # Create the rounded mask
     mask = Image.new("L", (width + padding*2, height + padding*2), 0)
     draw = ImageDraw.Draw(mask)
-
-    # Draw a rounded rectangle for the mask
-    # radius is the corner curvature
     radius = 80
     draw.rounded_rectangle(
         [padding, padding, width + padding, height + padding],
         radius=radius,
         fill=255
     )
-
-    # Paste the QR image into the center of the canvas
     canvas.paste(qr_img, (padding, padding))
-
-    # Apply the rounded mask to the canvas
     final_img = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
     final_img.paste(canvas, (0, 0), mask=mask)
-
-    # Convert back to RGB to save as PNG if needed, or keep RGBA for transparency
     final_img = final_img.convert("RGB")
 
     static_folder = os.path.join(current_app.root_path, 'static', 'qrcodes')
@@ -157,4 +172,6 @@ def admin_setup():
 
 @main_bp.route('/admin')
 def admin_page():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('main.index'))
     return render_template('admin_setup.html')
