@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Setup Business</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 md:p-12">
+    <div class="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+
+        <!-- Setup Form -->
+        <div class="bg-white rounded-2xl shadow-lg p-8">
+            <h1 class="text-2xl font-bold text-gray-800 mb-6">🚀 Business Setup</h1>
+            <form id="setupForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Business Name</label>
+                    <input type="text" id="name" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Tech Solutions Ltd">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Google Review Link / Place ID</label>
+                    <input type="text" id="place_id" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="https://g.page/...">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Products/Services (Comma separated)</label>
+                    <textarea id="products" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" rows="3" placeholder="Web Development, Training, Mentorship"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Review Tone</label>
+                    <select id="tone" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="professional">Professional & Formal</option>
+                        <option value="friendly">Friendly & Casual</option>
+                        <option value="enthusiastic">High-Energy & Enthusiastic</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all">Create Business & Generate QR</button>
+            </form>
+        </div>
+
+        <!-- QR Result -->
+        <div class="bg-white rounded-2xl shadow-lg p-8 flex flex-col items-center justify-center text-center">
+            <div id="qr-placeholder" class="text-gray-400 italic">
+                <p>Fill the form to generate your QR code</p>
+            </div>
+            <div id="qr-result" class="hidden space-y-6">
+                <h2 class="text-xl font-bold text-gray-800">Your Business QR Code</h2>
+                <div class="bg-white p-4 border-4 border-blue-500 rounded-xl inline-block">
+                    <img id="qr-image" src="" alt="QR Code" class="w-64 h-64">
+                </div>
+                <div class="space-y-2">
+                    <p class="text-sm text-gray-600" id="biz-link"></p>
+                    <a id="download-btn" download="business_qr.png" class="inline-block bg-green-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-green-700 transition-all">Download QR Image</a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        document.getElementById('setupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const data = {
+                name: document.getElementById('name').value,
+                google_place_id: document.getElementById('place_id').value,
+                products: document.getElementById('products').value.split(',').map(p => p.trim()),
+                tone: document.getElementById('tone').value
+            };
+
+            try {
+                const response = await fetch('/admin/setup', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+
+                if(result.success) {
+                    document.getElementById('qr-placeholder').classList.add('hidden');
+                    document.getElementById('qr-result').classList.remove('hidden');
+                    document.getElementById('qr-image').src = `/${result.qr_code}`;
+                    document.getElementById('download-btn').href = `/${result.qr_code}`;
+                    document.getElementById('biz-link').innerText = result.link;
+                }
+            } catch (error) {
+                alert("Error setting up business. Please try again.");
+            }
+        });
+    </script>
+</body>
+</html>

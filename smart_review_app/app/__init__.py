@@ -1,0 +1,29 @@
+import os
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from dotenv import load_dotenv
+
+# Load .env from the parent directory since our app is in a subfolder
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+
+db = SQLAlchemy()
+migrate = Migrate()
+
+def create_app():
+    app = Flask(__name__)
+
+    # Configuration
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///reviews.db')
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['GEMINI_API_KEY'] = os.getenv('GEMINI_API_KEY')
+    app.config['APP_BASE_URL'] = os.getenv('APP_BASE_URL', 'http://127.0.0.1:5000')
+
+    db.init_app(app)
+    migrate.init_app(app, db)
+
+    from app.routes import main_bp
+    app.register_blueprint(main_bp)
+
+    return app

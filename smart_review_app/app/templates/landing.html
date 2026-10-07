@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{{ business.name }} - Leave a Review</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Ensure the button looks clickable on iOS */
+        .ios-clickable {
+            -webkit-tap-highlight-color: transparent;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen p-4">
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">{{ business.name }}</h1>
+        <p class="text-gray-600 mb-6">We value your feedback! Please select the product you enjoyed:</p>
+
+        <div class="grid grid-cols-1 gap-3 mb-8">
+            {% for product in products %}
+            <button onclick="selectProduct('{{ product.name }}', {{ business.id }})"
+                    class="product-btn ios-clickable p-3 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left px-5 font-medium text-gray-700">
+                {{ product.name }}
+            </button>
+            {% endfor %}
+        </div>
+
+        <div id="review-section" class="hidden space-y-4">
+            <div class="p-4 bg-blue-50 rounded-lg text-gray-800 italic text-sm border border-blue-100 relative" id="generated-review">
+                Generating your perfect review...
+            </div>
+
+            <!-- Initial Copy Button -->
+            <button id="copy-btn" onclick="handleCopy()"
+                    class="ios-clickable w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg">
+                Copy Review
+            </button>
+
+            <!-- Success State (Hidden initially) -->
+            <div id="success-state" class="hidden space-y-4">
+                <p class="text-green-600 font-medium text-sm">✅ Review copied to clipboard!</p>
+                <a id="redirect-btn" href="#"
+                   class="block w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 transition-colors shadow-lg text-center">
+                    Paste & Post on Google →
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden element for legacy copy fallback -->
+    <textarea id="copy-helper" class="absolute -left-[9999px] -top-[9999px]" readonly></textarea>
+
+    <script>
+        let currentReviewLink = "";
+
+        async function selectProduct(productName, businessId) {
+            document.querySelectorAll('.product-btn').forEach(btn => btn.classList.remove('border-blue-500', 'bg-blue-50'));
+            event.target.classList.add('border-blue-500', 'bg-blue-50');
+
+            const reviewSection = document.getElementById('review-section');
+            const reviewText = document.getElementById('generated-review');
+
+            reviewSection.classList.remove('hidden');
+            document.getElementById('copy-btn').classList.remove('hidden');
+            document.getElementById('success-state').classList.add('hidden');
+            reviewText.innerText = "✨ Generating your perfect review...";
+
+            try {
+                const response = await fetch('/generate_review', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ product: productName, business_id: businessId })
+                });
+                const data = await response.json();
+                reviewText.innerText = data.review;
+                currentReviewLink = data.review_link;
+            } catch (e) {
+                reviewText.innerText = "Error generating review. Please try again.";
+            }
+        }
+
+        // iOS needs a very specific sequence for copy on non-HTTPS
+        async function handleCopy() {
+            const text = document.getElementById('generated-review').innerText;
+
+            // 1. Try Modern API (Requires HTTPS)
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    showSuccess();
+                    return;
+                } catch (err) {
+                    console.log("Modern API failed");
+                }
+            }
+
+            // 2. Fallback for iOS / HTTP
+            try {
+                const textArea = document.getElementById('copy-helper');
+                textArea.value = text;
+
+                // iOS requires the element to be visible/part of DOM for some versions
+                textArea.style.position = 'fixed';
+                textArea.style.left = '0';
+                textArea.style.opacity = '0';
+
+                textArea.focus();
+                textArea.select();
+                textArea.setSelectionRange(0, 99999);
+
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showSuccess();
+                } else {
+                    throw new Error("execCommand returned false");
+                }
+            } catch (err) {
+                // Final fallback for strict iOS: Manual Copy
+                alert("iOS Security: Please hold your finger on the review text above to copy it manually, then click 'Post on Google'.");
+                // Still show the redirect button so they can go to Google
+                showSuccess();
+            }
+        }
+
+        function showSuccess() {
+            document.getElementById('copy-btn').classList.add('hidden');
+            document.getElementById('success-state').classList.remove('hidden');
+            document.getElementById('redirect-btn').href = currentReviewLink;
+        }
+    </script>
+</body>
+</html>
