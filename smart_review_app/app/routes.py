@@ -7,6 +7,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from app.models import Business, Product, db
 import google.generativeai as genai
 from PIL import Image, ImageDraw
+from app.qr_modifier import QRModifier
 
 main_bp = Blueprint('main', __name__)
 
@@ -150,58 +151,35 @@ def admin_setup():
         db.session.add(product)
     db.session.commit()
 
+    # --- NEW MODIFIER FLOW ---
     base_url = current_app.config['APP_BASE_URL']
     qr_url = f"{base_url}/business/{business.id}"
 
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=10,
-        border=4,
-    )
-    qr.add_data(qr_url)
-    qr.make(fit=True)
+    try:
+        # 1. Initialize the modifier
+        modifier = QRModifier(business=business, qr_url=qr_url)
 
-    qr_img = qr.make_image(
-        image_factory=StyledPilImage,
-        module_drawer=RoundedModuleDrawer(),
-        color_mask=SolidFillColorMask(
-            back_color=(255, 255, 255),
-            front_color=(212, 175, 55)  # Gold
-        )
-    ).convert("RGBA")
+        # 2. Apply modifications (Professional template flow)
+        final_image = modifier.generate_professional_card()
 
-    padding = 40
-    width, height = qr_img.size
-    canvas = Image.new("RGBA", (width + padding*2, height + padding*2), (0, 0, 0, 0))
-    mask = Image.new("L", (width + padding*2, height + padding*2), 0)
-    draw = ImageDraw.Draw(mask)
-    radius = 80
-    draw.rounded_rectangle(
-        [padding, padding, width + padding, height + padding],
-        radius=radius,
-        fill=255
-    )
-    canvas.paste(qr_img, (padding, padding))
-    final_img = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    final_img.paste(canvas, (0, 0), mask=mask)
-    final_img = final_img.convert("RGB")
+        # 3. Save the result
+        static_folder = os.path.join(current_app.root_path, 'static', 'qrcodes')
+        os.makedirs(static_folder, exist_ok=True)
+        filename = f"qr_{business.id}.png"
+        file_path = os.path.join(static_folder, filename)
+        final_image.save(file_path)
 
-    static_folder = os.path.join(current_app.root_path, 'static', 'qrcodes')
-    os.makedirs(static_folder, exist_ok=True)
+        business.qr_code_path = f"static/qrcodes/{filename}"
+        db.session.commit()
 
-    filename = f"qr_{business.id}.png"
-    file_path = os.path.join(static_folder, filename)
-    final_img.save(file_path)
-
-    business.qr_code_path = f"static/qrcodes/{filename}"
-    db.session.commit()
-
-    return jsonify({
-        "success": True,
-        "qr_code": business.qr_code_path,
-        "link": qr_url
-    })
+        return jsonify({
+            "success": True,
+            "qr_code": business.qr_code_path,
+            "link": qr_url
+        })
+    except Exception as e:
+        print(f"QR Modifier Error: {e}")
+        return jsonify({"success": False, "error": f"Design failed: {str(e)}"}), 500
 
 @main_bp.route('/admin')
 def admin_page():
