@@ -17,6 +17,12 @@
                     <label class="block text-sm font-medium text-gray-700">Business Name</label>
                     <input type="text" id="name" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Tech Solutions Ltd">
                 </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Business Category</label>
+                    <input type="text" id="category" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Digital Marketing Agency">
+                </div>
+
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Google Review Link / Place ID</label>
                     <input type="text" id="place_id" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="https://g.page/...">
@@ -62,6 +68,7 @@
 
             const data = {
                 name: document.getElementById('name').value,
+                category: document.getElementById('category').value,
                 google_place_id: document.getElementById('place_id').value,
                 products: document.getElementById('products').value.split(',').map(p => p.trim()),
                 tone: document.getElementById('tone').value

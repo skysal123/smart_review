@@ -61,23 +61,54 @@ def generate_review():
 
     business = Business.query.get_or_404(business_id)
 
-    tone_guide = {
-        "professional": "Use a professional, formal, and polished tone.",
-        "friendly": "Use a warm, friendly, and casual tone.",
-        "enthusiastic": "Use a high-energy, extremely enthusiastic, and excited tone."
-    }
+    # Prepare services list for the prompt
+    services = [p.name for p in Product.query.filter_by(business_id=business_id).all()]
+    services_str = ", ".join(services)
 
-    prompt = (
-        f"{tone_guide.get(business.tone, tone_guide['professional'])} "
-        f"Write a short, positive 5-star Google review for a business named '{business.name}'. "
-        f"The customer is praising the service: '{product_name}'. "
-        f"Make it sound natural, genuine, and helpful to other users. "
-        f"Keep it under 3 sentences. Output ONLY the review text."
-    )
+    prompt = f"""
+You are an AI assistant that helps a real customer turn their genuine feedback
+into a short, natural Google review.
+
+BUSINESS
+Business name: {business.name}
+Business category: {business.category}
+Products/services: {services_str}
+
+CUSTOMER
+Service/product used: {product_name}
+Customer feedback: The customer is very happy with the {product_name} and wants to leave a positive 5-star review.
+Experience details: Positive experience with the {product_name}.
+
+RULES:
+- Use ONLY information provided by the customer.
+- Never invent experiences, employees, products, results, prices, or claims.
+- Write like a normal customer, NOT like a marketer or business owner.
+- Keep it SHORT: 2-3 sentences and preferably 50–60 words.
+- Maximum 60 words.
+- Avoid long paragraphs.
+- Do not repeat the same sentence structure or opening used in previous reviews.
+- Naturally focus on the most relevant aspect of the customer's experience,
+  such as service quality, product quality, staff/owner behaviour,
+  professionalism, value, speed, cleanliness, expertise, or convenience.
+- Adapt the wording to the business category.
+- Do not force keywords or mention every product/service.
+- Avoid repetitive phrases like "highly recommended", "excellent service",
+  "amazing experience", and "best service" unless they genuinely reflect
+  the customer's feedback.
+- Use simple, conversational language.
+- Do not use emojis unless the customer used them.
+- Do not mention AI.
+- Do not use quotation marks.
+- Output ONLY the review.
+
+IMPORTANT:
+Every review should feel naturally different in wording, length,
+sentence structure, vocabulary, and the aspect being highlighted.
+"""
 
     try:
         genai.configure(api_key=current_app.config['GEMINI_API_KEY'])
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-3-flash-preview')
         response = model.generate_content(prompt)
         review_text = response.text
     except Exception as e:
@@ -100,12 +131,14 @@ def admin_setup():
     if not business:
         business = Business(
             name=data['name'],
+            category=data.get('category'),
             google_place_id=data['google_place_id'],
             tone=data.get('tone', 'professional')
         )
         db.session.add(business)
     else:
         business.google_place_id = data['google_place_id']
+        business.category = data.get('category')
         business.tone = data.get('tone', 'professional')
         Product.query.filter_by(business_id=business.id).delete()
 
