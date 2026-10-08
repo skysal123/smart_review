@@ -5,9 +5,12 @@ from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
 from qrcode.image.styles.colormasks import SolidFillColorMask
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, current_app, session
 from app.models import Business, Product, db
-import google.generativeai as genai
+import time
 from PIL import Image, ImageDraw
 from app.qr_modifier import QRModifier
+
+main_bp = Blueprint('main', __name__)
+
 
 main_bp = Blueprint('main', __name__)
 
@@ -57,28 +60,31 @@ def business_landing(business_id):
 @main_bp.route('/generate_review', methods=['POST'])
 def generate_review():
     data = request.json
-    product_name = data.get('product')
+    products = data.get('products', [])
     business_id = data.get('business_id')
-
+    if not products:
+        return jsonify({"success": False, "error": "Please select at least one product"}), 400
     business = Business.query.get_or_404(business_id)
 
+    selected_products_str = ", ".join(products) if isinstance(products, list) else str(products)
     # Prepare services list for the prompt
-    services = [p.name for p in Product.query.filter_by(business_id=business_id).all()]
-    services_str = ", ".join(services)
+    #services = [p.name for p in Product.query.filter_by(business_id=business_id).all()]
+    #services_str = ", ".join(services)
+
+    #selected_products_str = ", ".join(products) if isinstance(products, list) else str(products)
 
     prompt = f"""
 You are an AI assistant that helps a real customer turn their genuine feedback
 into a short, natural Google review.
 
 BUSINESS
-Business name: {business.name}
-Business category: {business.category}
-Products/services: {services_str}
+Business: {business.name} ({business.category})
+Products used: {selected_products_str}
 
 CUSTOMER
-Service/product used: {product_name}
-Customer feedback: The customer is very happy with the {product_name} and wants to leave a positive 5-star review.
-Experience details: Positive experience with the {product_name}.
+Service/product used: {selected_products_str}
+Customer feedback: The customer is very happy with {selected_products_str} and wants to leave a positive 5-star review.
+Experience details: Positive experience with {selected_products_str}.
 
 RULES:
 - Use ONLY information provided by the customer.
@@ -105,21 +111,40 @@ RULES:
 IMPORTANT:
 Every review should feel naturally different in wording, length,
 sentence structure, vocabulary, and the aspect being highlighted.
+If multiple products are selected, combine them naturally into the review.
 """
 
     try:
-        genai.configure(api_key=current_app.config['GEMINI_API_KEY'])
-        model = genai.GenerativeModel('gemini-3-flash-preview')
-        response = model.generate_content(prompt)
-        review_text = response.text
+        # Use the singleton client initialized in app/__init__.py
+        client = current_app.extensions.get('gemini_client')
+        if not client:
+            raise Exception("Gemini client not initialized")
+
+        start_time = time.perf_counter()
+
+        # Use modern google-genai SDK and fast flash model
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=prompt,
+            config={
+                'max_output_tokens': 80,
+                'temperature': 0.7
+            }
+        )
+
+        latency = time.perf_counter() - start_time
+        current_app.logger.info("Gemini review generation latency: %.2fs", latency)
+
+        review_text = response.text.strip()
     except Exception as e:
-        print(f"AI Error: {e}")
-        review_text = f"I had an amazing experience with {business.name}! The {product_name} was absolutely fantastic. Highly recommended!"
+        current_app.logger.exception("Gemini review generation failed")
+        review_text = f"I had a great experience with {business.name}! The {selected_products_str} was fantastic. Highly recommended!"
 
     return jsonify({
         "review": review_text,
         "review_link": get_google_review_link(business.google_place_id)
     })
+
 
 @main_bp.route('/admin/setup', methods=['POST'])
 def admin_setup():

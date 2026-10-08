@@ -22,7 +22,7 @@ class QRModifier:
         qr.make(fit=True)
         return qr.make_image(fill_color="black", back_color="white").convert("RGBA")
 
-    def generate_professional_card(self):
+    def generate_professional_card_bk(self):
         # 1. Load the static template
         if not os.path.exists(self.template_path):
             # Fallback: Create a basic white canvas if template is missing to avoid app crash
@@ -59,5 +59,39 @@ class QRModifier:
         # # Position the business name at the bottom area of the template
         # # Adjust 1200 based on the template layout
         # draw.text((canvas_w//2, 1200), self.business.name.upper(), fill="black", font=font_name, anchor="mm")
+
+        return template.convert("RGB")
+    
+    
+    def generate_professional_card(self):
+        # 1. Load the static template
+        if not os.path.exists(self.template_path):
+            print(f"WARNING: Template image not found at {self.template_path}. Using fallback white background.")
+            template = Image.new("RGBA", (1000, 1400), (255, 255, 255, 255))
+        else:
+            template = Image.open(self.template_path).convert("RGBA")
+
+        canvas_w, canvas_h = template.size
+
+        # 2. Generate the QR code
+        qr_img = self._generate_raw_qr()
+
+        # 3. Add a "Quiet Zone" (White Border)
+        # This is the critical part for mobile scanning.
+        # We create a slightly larger white square and paste the QR inside it.
+        border_size = 15
+        qr_with_border = Image.new("RGBA", (qr_img.width + border_size*2, qr_img.height + border_size*2), (255, 255, 255, 255))
+        qr_with_border.paste(qr_img, (border_size, border_size), qr_img)
+
+        # 4. Resize to fit the template's "hole"
+        qr_size = 400
+        qr_img_final = qr_with_border.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
+
+        # 5. Position the QR code (Centered)
+        offset_x = (canvas_w - qr_size) // 2
+        offset_y = (canvas_h // 2) - (qr_size // 2)
+
+        # Paste the bordered QR onto template
+        template.paste(qr_img_final, (offset_x, offset_y), qr_img_final)
 
         return template.convert("RGB")

@@ -12,6 +12,45 @@
             -webkit-tap-highlight-color: transparent;
             cursor: pointer;
         }
+
+        /* Loading Overlay */
+        #loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-family: sans-serif;
+            font-weight: 600;
+            color: #333;
+            font-size: 1.2rem;
+            text-align: center;
+        }
     </style>
 </head>
 <body class="bg-gray-50 flex items-center justify-center min-h-screen p-4">
@@ -21,17 +60,23 @@
 
         <div class="grid grid-cols-1 gap-3 mb-8">
             {% for product in products %}
-            <button onclick="selectProduct('{{ product.name }}', {{ business.id }})"
+            <button onclick="toggleProduct('{{ product.name }}', this)"
                     class="product-btn ios-clickable p-3 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left px-5 font-medium text-gray-700">
                 {{ product.name }}
             </button>
             {% endfor %}
         </div>
 
+        <button id="generate-btn" onclick="generateReview()"
+                class="ios-clickable hidden w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg mb-8">
+            Generate Review ✨
+        </button>
+
         <div id="review-section" class="hidden space-y-4">
             <div class="p-4 bg-blue-50 rounded-lg text-gray-800 italic text-sm border border-blue-100 relative" id="generated-review">
                 Generating your perfect review...
             </div>
+
 
             <!-- Initial Copy Button -->
             <button id="copy-btn" onclick="handleCopy()"
@@ -55,35 +100,62 @@
 
     <script>
         let currentReviewLink = "";
+        let selectedProducts = new Set();
+        const businessId = {{ business.id }};
 
-        async function selectProduct(productName, businessId) {
-            document.querySelectorAll('.product-btn').forEach(btn => btn.classList.remove('border-blue-500', 'bg-blue-50'));
-            event.target.classList.add('border-blue-500', 'bg-blue-50');
+        function toggleProduct(productName, btn) {
+            if (selectedProducts.has(productName)) {
+                selectedProducts.delete(productName);
+                btn.classList.remove('border-blue-500', 'bg-blue-50');
+            } else {
+                selectedProducts.add(productName);
+                btn.classList.add('border-blue-500', 'bg-blue-50');
+            }
 
+            const generateBtn = document.getElementById('generate-btn');
+            if (selectedProducts.size > 0) {
+                generateBtn.classList.remove('hidden');
+            } else {
+                generateBtn.classList.add('hidden');
+                document.getElementById('review-section').classList.add('hidden');
+            }
+        }
+
+        async function generateReview() {
             const reviewSection = document.getElementById('review-section');
             const reviewText = document.getElementById('generated-review');
+            const generateBtn = document.getElementById('generate-btn');
 
             reviewSection.classList.remove('hidden');
             document.getElementById('copy-btn').classList.remove('hidden');
             document.getElementById('success-state').classList.add('hidden');
             reviewText.innerText = "✨ Generating your perfect review...";
+            generateBtn.disabled = true;
+            generateBtn.innerText = "Generating...";
 
             try {
                 const response = await fetch('/generate_review', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ product: productName, business_id: businessId })
+                    body: JSON.stringify({
+                        products: Array.from(selectedProducts),
+                        business_id: businessId
+                    })
                 });
                 const data = await response.json();
                 reviewText.innerText = data.review;
                 currentReviewLink = data.review_link;
             } catch (e) {
                 reviewText.innerText = "Error generating review. Please try again.";
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.innerText = "Generate Review ✨";
             }
         }
 
         // iOS needs a very specific sequence for copy on non-HTTPS
         async function handleCopy() {
+
             const text = document.getElementById('generated-review').innerText;
 
             // 1. Try Modern API (Requires HTTPS)

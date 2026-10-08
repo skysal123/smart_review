@@ -3,6 +3,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from dotenv import load_dotenv
+from google import genai
 
 # Load .env from the parent directory since our app is in a subfolder
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -24,6 +25,13 @@ def create_app():
 
     db.init_app(app)
     migrate.init_app(app, db)
+
+    # Initialize Gemini Client once
+    try:
+        client = genai.Client(api_key=app.config['GEMINI_API_KEY'])
+        app.extensions['gemini_client'] = client
+    except Exception as e:
+        app.logger.error(f"Failed to initialize Gemini client: {e}")
 
     from app.routes import main_bp
     app.register_blueprint(main_bp)
